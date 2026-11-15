@@ -31,7 +31,7 @@ async function connect(){
  fail("");const room=$("room").value.trim(),pin=$("pin").value.trim();
  if(!room||!/^[a-f0-9-]{16,64}$/i.test(room)){fail("請輸入有效的房間 ID");return}
  if(!/^\d{6}$/.test(pin)){fail("請輸入六位數配對碼");return}
- const base=$("signal").value.trim().replace(/\\/$/,"");
+ const base=$("signal").value.trim().replace(/\/$/,"");
  if(!base.startsWith("https://")){fail("請輸入已部署的 HTTPS Worker 網址");$("connect").disabled=false;return}
  const endpoint=base.replace(/^https:/,"wss:")+"/ws/"+encodeURIComponent(room);
  $("connect").disabled=true;status("正在連線…");
