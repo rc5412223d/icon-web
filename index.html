@@ -16,7 +16,7 @@ main{max-width:1050px;margin:auto;padding:28px 18px 50px}.top{display:flex;align
 <header class="top"><div class="brand"><div class="logo">◉</div><div><h1>PocketCam</h1><div class="muted">即時監看控制台</div></div></div><div class="status" id="status">尚未連線</div></header>
 <div class="layout">
 <section class="card"><h2>即時畫面</h2><div class="screen"><video id="video" autoplay playsinline controls></video><div class="placeholder" id="placeholder"><div style="font-size:34px">▣</div><b>等待攝影機連線</b><div class="muted">輸入攝影機顯示的配對資訊後連線</div></div></div><div class="controls"><button id="connect">連線觀看</button><button class="secondary" id="disconnect" disabled>中斷連線</button><button class="secondary" id="fullscreen">全螢幕</button></div><div class="error" id="error" role="status"></div></section>
-<aside class="card"><h2>設備配對</h2><label for="room">房間 ID</label><input id="room" autocomplete="off" placeholder="輸入攝影機上的房間 ID"><label for="pin">六位數配對碼</label><input id="pin" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="000000"><div class="note">請只輸入你自己的攝影機所顯示的配對資訊。房間 ID 和配對碼不要公開分享。</div><div style="height:18px"></div><h2>連線資訊</h2><div class="stats"><div class="stat"><small>連線方式</small><strong id="transport">WebRTC 點對點</strong></div><div class="stat"><small>影像狀態</small><strong id="media">尚無影像</strong></div><div class="stat"><small>音訊</small><strong id="audio">等待串流</strong></div></div></aside>
+<aside class="card"><h2>設備配對</h2><label for="signal">訊號伺服器網址</label><input id="signal" autocomplete="url" placeholder="https://你的-worker.workers.dev"><label for="room">房間 ID</label><input id="room" autocomplete="off" placeholder="輸入攝影機上的房間 ID"><label for="pin">六位數配對碼</label><input id="pin" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="000000"><div class="note">請只輸入你自己的攝影機所顯示的配對資訊。房間 ID 和配對碼不要公開分享。</div><div style="height:18px"></div><h2>連線資訊</h2><div class="stats"><div class="stat"><small>連線方式</small><strong id="transport">WebRTC 點對點</strong></div><div class="stat"><small>影像狀態</small><strong id="media">尚無影像</strong></div><div class="stat"><small>音訊</small><strong id="audio">等待串流</strong></div></div></aside>
 </div><p class="note">PocketCam 會在攝影機端顯示持續運作通知。若跨網路無法建立點對點連線，需設定 TURN 中繼服務。</p>
 </main>
 <script>
@@ -31,8 +31,9 @@ async function connect(){
  fail("");const room=$("room").value.trim(),pin=$("pin").value.trim();
  if(!room||!/^[a-f0-9-]{16,64}$/i.test(room)){fail("請輸入有效的房間 ID");return}
  if(!/^\d{6}$/.test(pin)){fail("請輸入六位數配對碼");return}
- const base=location.protocol==="https:"?"wss:":"ws:";
- const endpoint=base+"//"+location.host+"/ws/"+encodeURIComponent(room);
+ const base=$("signal").value.trim().replace(/\\/$/,"");
+ if(!base.startsWith("https://")){fail("請輸入已部署的 HTTPS Worker 網址");$("connect").disabled=false;return}
+ const endpoint=base.replace(/^https:/,"wss:")+"/ws/"+encodeURIComponent(room);
  $("connect").disabled=true;status("正在連線…");
  try{
   ws=new WebSocket(endpoint);
