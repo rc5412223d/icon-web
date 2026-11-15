@@ -15,44 +15,51 @@ main{max-width:1050px;margin:auto;padding:28px 18px 50px}.top{display:flex;align
 <body><main>
 <header class="top"><div class="brand"><div class="logo">◉</div><div><h1>PocketCam</h1><div class="muted">即時監看控制台</div></div></div><div class="status" id="status">尚未連線</div></header>
 <div class="layout">
-<section class="card"><h2>即時畫面</h2><div class="screen"><video id="video" autoplay playsinline controls></video><div class="placeholder" id="placeholder"><div style="font-size:34px">▣</div><b>等待攝影機連線</b><div class="muted">輸入攝影機顯示的配對資訊後連線</div></div></div><div class="controls"><button id="connect">連線觀看</button><button class="secondary" id="disconnect" disabled>中斷連線</button><button class="secondary" id="fullscreen">全螢幕</button></div><div class="error" id="error" role="status"></div></section>
-<aside class="card"><h2>設備配對</h2><label for="signal">訊號伺服器網址</label><input id="signal" autocomplete="url" placeholder="https://你的-worker.workers.dev"><label for="room">房間 ID</label><input id="room" autocomplete="off" placeholder="輸入攝影機上的房間 ID"><label for="pin">六位數配對碼</label><input id="pin" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="000000"><div class="note">請只輸入你自己的攝影機所顯示的配對資訊。房間 ID 和配對碼不要公開分享。</div><div style="height:18px"></div><h2>連線資訊</h2><div class="stats"><div class="stat"><small>連線方式</small><strong id="transport">WebRTC 點對點</strong></div><div class="stat"><small>影像狀態</small><strong id="media">尚無影像</strong></div><div class="stat"><small>音訊</small><strong id="audio">等待串流</strong></div></div></aside>
+<section class="card"><h2>即時畫面</h2><div class="screen"><video id="video" autoplay playsinline controls></video><div class="placeholder" id="placeholder"><div style="font-size:34px">▣</div><b>等待攝影機連線</b><div class="muted">輸入單一密碼即可連線</div></div></div><div class="controls"><button id="connect">連線觀看</button><button class="secondary" id="disconnect" disabled>中斷連線</button><button class="secondary" id="fullscreen">全螢幕</button></div><div class="error" id="error" role="status"></div></section>
+<aside class="card"><h2>設備配對</h2><label for="signal">訊號伺服器網址</label><input id="signal" autocomplete="url" value="https://icon.chenneww6666.workers.dev" placeholder="https://你的-worker.workers.dev"><label for="password">單一連線密碼</label><input id="password" type="password" autocomplete="current-password" placeholder="輸入 PocketCam 密碼"><div class="note">攝影機端與觀看端使用相同密碼。請勿把密碼分享給未授權的人。</div><div style="height:18px"></div><h2>連線資訊</h2><div class="stats"><div class="stat"><small>連線方式</small><strong id="transport">WebRTC 點對點</strong></div><div class="stat"><small>影像狀態</small><strong id="media">尚無影像</strong></div><div class="stat"><small>音訊</small><strong id="audio">等待串流</strong></div></div></aside>
 </div><p class="note">PocketCam 會在攝影機端顯示持續運作通知。若跨網路無法建立點對點連線，需設定 TURN 中繼服務。</p>
 </main>
 <script>
 const $=id=>document.getElementById(id);
-let ws=null,pc=null,connected=false;
+let ws=null,pc=null,connected=false,heartbeat=null;
 const iceServers=[{urls:"stun:stun.l.google.com:19302"}];
 function status(s){$("status").textContent=s}
 function fail(s){$("error").textContent=s}
 function send(data){if(ws&&ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify(data))}
-function cleanup(){connected=false;if(pc){pc.close();pc=null}if(ws){ws.close();ws=null}$("video").srcObject=null;$("placeholder").style.display="grid";$("connect").disabled=false;$("disconnect").disabled=true;$("media").textContent="尚無影像";$("audio").textContent="等待串流";status("尚未連線")}
+function cleanup(){connected=false;if(heartbeat){clearInterval(heartbeat);heartbeat=null}if(pc){pc.close();pc=null}if(ws){ws.close();ws=null}$("video").srcObject=null;$("placeholder").style.display="grid";$("connect").disabled=false;$("disconnect").disabled=true;$("media").textContent="尚無影像";$("audio").textContent="等待串流";status("尚未連線")}
 async function connect(){
- fail("");const room=$("room").value.trim(),pin=$("pin").value.trim();
- if(!room||!/^[a-f0-9-]{16,64}$/i.test(room)){fail("請輸入有效的房間 ID");return}
- if(!/^\d{6}$/.test(pin)){fail("請輸入六位數配對碼");return}
+ fail("");
+ const password=$("password").value.trim();
+ if(!password){fail("請先輸入單一連線密碼");return}
  const base=$("signal").value.trim().replace(/\/$/,"");
  if(!base.startsWith("https://")){fail("請輸入已部署的 HTTPS Worker 網址");$("connect").disabled=false;return}
- const endpoint=base.replace(/^https:/,"wss:")+"/ws/"+encodeURIComponent(room);
+ const endpoint=base.replace(/^https:/,"wss:")+"/ws";
  $("connect").disabled=true;status("正在連線…");
  try{
   ws=new WebSocket(endpoint);
   pc=new RTCPeerConnection({iceServers});
   pc.ontrack=e=>{$("video").srcObject=e.streams[0];$("placeholder").style.display="none";$("media").textContent="正在播放";$("audio").textContent="依攝影機音訊來源"};
   pc.onicecandidate=e=>{if(e.candidate)send({type:"candidate",candidate:e.candidate})};
-  pc.onconnectionstatechange=()=>{status("影音："+pc.connectionState);if(pc.connectionState==="failed")fail("WebRTC 連線失敗；可能需要 TURN 中繼服務。")};
-  ws.onopen=()=>send({type:"hello",role:"viewer",pin});
+  pc.onconnectionstatechange=()=>{if(pc)status("影音："+pc.connectionState);if(pc&&pc.connectionState==="failed")fail("WebRTC 連線失敗；可能需要 TURN 中繼服務。")};
+  ws.onopen=()=>{
+   send({type:"hello",role:"viewer",password});
+   if(heartbeat)clearInterval(heartbeat);
+   heartbeat=setInterval(()=>send({type:"ping"}),15000);
+  };
   ws.onmessage=async e=>{
-   const m=JSON.parse(e.data);
-   if(m.type==="authenticated"){connected=true;status("已驗證，等待攝影機");$("disconnect").disabled=false;return}
-   if(m.type==="peer-ready"){status("攝影機已連線");return}
-   if(m.type==="error"){fail(m.message);cleanup();return}
-   if(m.type==="offer"){await pc.setRemoteDescription(m.sdp);const answer=await pc.createAnswer();await pc.setLocalDescription(answer);send({type:"answer",sdp:pc.localDescription});return}
-   if(m.type==="candidate"&&m.candidate){try{await pc.addIceCandidate(m.candidate)}catch(err){console.warn(err)}}
-   if(m.type==="peer-left"){status("攝影機已離線");$("media").textContent="攝影機離線"}
+   try{
+    const m=JSON.parse(e.data);
+    if(m.type==="authenticated"){connected=true;status("密碼驗證成功，等待攝影機");$("disconnect").disabled=false;return}
+    if(m.type==="pong")return;
+    if(m.type==="peer-ready"){status("攝影機已連線");return}
+    if(m.type==="error"){fail(m.message);cleanup();return}
+    if(m.type==="offer"){await pc.setRemoteDescription(m.sdp);const answer=await pc.createAnswer();await pc.setLocalDescription(answer);send({type:"answer",sdp:pc.localDescription});return}
+    if(m.type==="candidate"&&m.candidate){try{await pc.addIceCandidate(m.candidate)}catch(err){console.warn(err)}}
+    if(m.type==="peer-left"){status("攝影機已離線");$("media").textContent="攝影機離線"}
+   }catch(err){fail("訊號資料處理失敗："+(err.message||err))}
   };
   ws.onerror=()=>fail("訊號連線發生錯誤，請檢查網址及 Worker 部署。");
-  ws.onclose=()=>{if(connected)status("訊號連線已關閉")};
+  ws.onclose=()=>{if(heartbeat){clearInterval(heartbeat);heartbeat=null}if(connected)status("訊號連線已關閉");connected=false};
  }catch(e){fail(e.message||"連線失敗");cleanup()}
 }
 $("connect").onclick=connect;$("disconnect").onclick=cleanup;
