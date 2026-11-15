@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#10131d">
+<title>PocketCam｜即時監看</title>
+<style>
+:root{color-scheme:dark;--bg:#0b0e16;--panel:#151a27;--line:#293247;--muted:#9aa6bd;--accent:#6d8cff;--good:#39c98a;--bad:#ff647c}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at top,#1a2340 0,#0b0e16 55%);color:#eef2ff;font:15px system-ui,-apple-system,"Noto Sans TC",sans-serif;min-height:100vh}
+main{max-width:1050px;margin:auto;padding:28px 18px 50px}.top{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:22px}.brand{display:flex;align-items:center;gap:12px}.logo{width:44px;height:44px;border-radius:14px;background:linear-gradient(135deg,#7b8fff,#4c5bd4);display:grid;place-items:center;font-size:23px}.muted{color:var(--muted)}h1{font-size:22px;margin:0}h2{font-size:17px;margin:0 0 14px}.status{border:1px solid var(--line);padding:8px 12px;border-radius:99px;color:var(--muted);font-size:13px}.layout{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(260px,.8fr);gap:16px}.card{background:linear-gradient(145deg,#171d2b,#111622);border:1px solid var(--line);border-radius:20px;padding:18px;box-shadow:0 18px 50px #0003}.screen{background:#05070c;border:1px solid #30394c;border-radius:14px;aspect-ratio:16/9;display:grid;place-items:center;overflow:hidden;position:relative}.screen video{width:100%;height:100%;object-fit:contain}.placeholder{text-align:center;color:var(--muted);padding:20px}.controls{display:flex;gap:9px;flex-wrap:wrap;margin-top:14px}button{border:0;border-radius:11px;padding:11px 15px;background:var(--accent);color:white;font-weight:650;cursor:pointer}button.secondary{background:#252e42}button:disabled{opacity:.45;cursor:not-allowed}input{width:100%;background:#0c111c;color:white;border:1px solid var(--line);border-radius:11px;padding:12px;font:inherit;outline:none}input:focus{border-color:var(--accent)}label{display:block;font-size:13px;color:var(--muted);margin:12px 0 7px}.fields{display:grid;grid-template-columns:1fr 1fr;gap:10px}.note{font-size:12px;line-height:1.6;color:var(--muted);margin-top:14px}.stats{display:grid;gap:10px}.stat{padding:12px;border-radius:12px;background:#0e1420;border:1px solid #222d40}.stat small{display:block;color:var(--muted);margin-bottom:4px}.stat strong{font-size:14px}.error{color:#ff9ba9;min-height:20px;font-size:13px;margin-top:10px}
+@media(max-width:760px){main{padding:20px 12px}.layout{grid-template-columns:1fr}.top{align-items:flex-start}.fields{grid-template-columns:1fr}.card{padding:15px}}
+</style>
+</head>
+<body><main>
+<header class="top"><div class="brand"><div class="logo">◉</div><div><h1>PocketCam</h1><div class="muted">即時監看控制台</div></div></div><div class="status" id="status">尚未連線</div></header>
+<div class="layout">
+<section class="card"><h2>即時畫面</h2><div class="screen"><video id="video" autoplay playsinline controls></video><div class="placeholder" id="placeholder"><div style="font-size:34px">▣</div><b>等待攝影機連線</b><div class="muted">輸入攝影機顯示的配對資訊後連線</div></div></div><div class="controls"><button id="connect">連線觀看</button><button class="secondary" id="disconnect" disabled>中斷連線</button><button class="secondary" id="fullscreen">全螢幕</button></div><div class="error" id="error" role="status"></div></section>
+<aside class="card"><h2>設備配對</h2><label for="room">房間 ID</label><input id="room" autocomplete="off" placeholder="輸入攝影機上的房間 ID"><label for="pin">六位數配對碼</label><input id="pin" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="000000"><div class="note">請只輸入你自己的攝影機所顯示的配對資訊。房間 ID 和配對碼不要公開分享。</div><div style="height:18px"></div><h2>連線資訊</h2><div class="stats"><div class="stat"><small>連線方式</small><strong id="transport">WebRTC 點對點</strong></div><div class="stat"><small>影像狀態</small><strong id="media">尚無影像</strong></div><div class="stat"><small>音訊</small><strong id="audio">等待串流</strong></div></div></aside>
+</div><p class="note">PocketCam 會在攝影機端顯示持續運作通知。若跨網路無法建立點對點連線，需設定 TURN 中繼服務。</p>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+let ws=null,pc=null,connected=false;
+const iceServers=[{urls:"stun:stun.l.google.com:19302"}];
+function status(s){$("status").textContent=s}
+function fail(s){$("error").textContent=s}
+function send(data){if(ws&&ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify(data))}
+function cleanup(){connected=false;if(pc){pc.close();pc=null}if(ws){ws.close();ws=null}$("video").srcObject=null;$("placeholder").style.display="grid";$("connect").disabled=false;$("disconnect").disabled=true;$("media").textContent="尚無影像";$("audio").textContent="等待串流";status("尚未連線")}
+async function connect(){
+ fail("");const room=$("room").value.trim(),pin=$("pin").value.trim();
+ if(!room||!/^[a-f0-9-]{16,64}$/i.test(room)){fail("請輸入有效的房間 ID");return}
+ if(!/^\d{6}$/.test(pin)){fail("請輸入六位數配對碼");return}
+ const base=location.protocol==="https:"?"wss:":"ws:";
+ const endpoint=base+"//"+location.host+"/ws/"+encodeURIComponent(room);
+ $("connect").disabled=true;status("正在連線…");
+ try{
+  ws=new WebSocket(endpoint);
+  pc=new RTCPeerConnection({iceServers});
+  pc.ontrack=e=>{$("video").srcObject=e.streams[0];$("placeholder").style.display="none";$("media").textContent="正在播放";$("audio").textContent="依攝影機音訊來源"};
+  pc.onicecandidate=e=>{if(e.candidate)send({type:"candidate",candidate:e.candidate})};
+  pc.onconnectionstatechange=()=>{status("影音："+pc.connectionState);if(pc.connectionState==="failed")fail("WebRTC 連線失敗；可能需要 TURN 中繼服務。")};
+  ws.onopen=()=>send({type:"hello",role:"viewer",pin});
+  ws.onmessage=async e=>{
+   const m=JSON.parse(e.data);
+   if(m.type==="authenticated"){connected=true;status("已驗證，等待攝影機");$("disconnect").disabled=false;return}
+   if(m.type==="peer-ready"){status("攝影機已連線");return}
+   if(m.type==="error"){fail(m.message);cleanup();return}
+   if(m.type==="offer"){await pc.setRemoteDescription(m.sdp);const answer=await pc.createAnswer();await pc.setLocalDescription(answer);send({type:"answer",sdp:pc.localDescription});return}
+   if(m.type==="candidate"&&m.candidate){try{await pc.addIceCandidate(m.candidate)}catch(err){console.warn(err)}}
+   if(m.type==="peer-left"){status("攝影機已離線");$("media").textContent="攝影機離線"}
+  };
+  ws.onerror=()=>fail("訊號連線發生錯誤，請檢查網址及 Worker 部署。");
+  ws.onclose=()=>{if(connected)status("訊號連線已關閉")};
+ }catch(e){fail(e.message||"連線失敗");cleanup()}
+}
+$("connect").onclick=connect;$("disconnect").onclick=cleanup;
+$("fullscreen").onclick=()=>{const v=$("video");if(v.requestFullscreen)v.requestFullscreen()};
+window.addEventListener("beforeunload",()=>{if(ws)ws.close();if(pc)pc.close()});
+</script></body></html>
