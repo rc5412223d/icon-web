@@ -6,18 +6,49 @@
 <meta name="theme-color" content="#10131d">
 <title>PocketCam｜即時監看</title>
 <style>
-:root{color-scheme:dark;--bg:#0b0e16;--panel:#151a27;--line:#293247;--muted:#9aa6bd;--accent:#6d8cff;--good:#39c98a;--bad:#ff647c}
-*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at top,#1a2340 0,#0b0e16 55%);color:#eef2ff;font:15px system-ui,-apple-system,"Noto Sans TC",sans-serif;min-height:100vh}
-main{max-width:1050px;margin:auto;padding:28px 18px 50px}.top{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:22px}.brand{display:flex;align-items:center;gap:12px}.logo{width:44px;height:44px;border-radius:14px;background:linear-gradient(135deg,#7b8fff,#4c5bd4);display:grid;place-items:center;font-size:23px}.muted{color:var(--muted)}h1{font-size:22px;margin:0}h2{font-size:17px;margin:0 0 14px}.status{border:1px solid var(--line);padding:8px 12px;border-radius:99px;color:var(--muted);font-size:13px}.layout{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(260px,.8fr);gap:16px}.card{background:linear-gradient(145deg,#171d2b,#111622);border:1px solid var(--line);border-radius:20px;padding:18px;box-shadow:0 18px 50px #0003}.screen{background:#05070c;border:1px solid #30394c;border-radius:14px;aspect-ratio:16/9;display:grid;place-items:center;overflow:hidden;position:relative}.screen video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#05070c}.placeholder{position:absolute;inset:0;display:grid;align-content:center;justify-items:center;text-align:center;color:var(--muted);padding:20px;pointer-events:none}.controls{display:flex;gap:9px;flex-wrap:wrap;margin-top:14px}button{border:0;border-radius:11px;padding:11px 15px;background:var(--accent);color:white;font-weight:650;cursor:pointer}button.secondary{background:#252e42}button:disabled{opacity:.45;cursor:not-allowed}input{width:100%;background:#0c111c;color:white;border:1px solid var(--line);border-radius:11px;padding:12px;font:inherit;outline:none}input:focus{border-color:var(--accent)}label{display:block;font-size:13px;color:var(--muted);margin:12px 0 7px}.fields{display:grid;grid-template-columns:1fr 1fr;gap:10px}.note{font-size:12px;line-height:1.6;color:var(--muted);margin-top:14px}.stats{display:grid;gap:10px}.stat{padding:12px;border-radius:12px;background:#0e1420;border:1px solid #222d40}.stat small{display:block;color:var(--muted);margin-bottom:4px}.stat strong{font-size:14px}.error{color:#ff9ba9;min-height:20px;font-size:13px;margin-top:10px}
-@media(max-width:760px){main{padding:20px 12px}.layout{grid-template-columns:1fr}.top{align-items:flex-start}.fields{grid-template-columns:1fr}.card{padding:15px}}
+:root{color-scheme:dark;--bg:#090d18;--panel:#141b2b;--panel2:#101727;--line:#293650;--muted:#93a2bf;--accent:#7892ff;--good:#43d6a0;--bad:#ff7088;--text:#edf2ff}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 50% -15%,#273761 0,#111a2d 34%,#090d18 72%);color:var(--text);font:15px/1.5 system-ui,-apple-system,"Noto Sans TC",sans-serif}
+main{max-width:1220px;margin:auto;padding:30px 22px 54px}.top{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:24px}.brand{display:flex;align-items:center;gap:14px}.logo{width:48px;height:48px;border-radius:16px;background:linear-gradient(145deg,#91a5ff,#5268dc);display:grid;place-items:center;font-size:25px;box-shadow:0 8px 30px #5268dc55}.brand h1{font-size:24px;letter-spacing:.02em;margin:0}.muted{color:var(--muted)}.eyebrow{font-size:11px;letter-spacing:.2em;color:#8da4ff;font-weight:750}.status{border:1px solid var(--line);padding:8px 13px;border-radius:99px;color:#c1cbea;font-size:12px;background:#10192a}
+.layout{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(285px,.8fr);gap:18px;align-items:start}.card{background:linear-gradient(145deg,#182238eF,#101827f5);border:1px solid var(--line);border-radius:22px;padding:20px;box-shadow:0 20px 60px #0004}.card h2{font-size:16px;margin:0 0 15px;letter-spacing:.02em}.screen{background:#03060c;border:1px solid #303d59;border-radius:17px;aspect-ratio:16/9;display:grid;place-items:center;overflow:hidden;position:relative}.screen video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#03060c}.placeholder{position:absolute;inset:0;display:grid;align-content:center;justify-items:center;text-align:center;color:var(--muted);padding:20px;pointer-events:none}.controls{display:flex;gap:10px;flex-wrap:wrap;margin-top:15px}button{border:0;border-radius:12px;padding:12px 17px;background:linear-gradient(135deg,#8198ff,#596fe8);color:white;font-weight:700;cursor:pointer;transition:filter .15s,transform .15s}button:hover{filter:brightness(1.12);transform:translateY(-1px)}button.secondary{background:#293650;color:#dce5ff}button:disabled{opacity:.45;cursor:not-allowed;transform:none}input{width:100%;background:#0a1120;color:white;border:1px solid #30405e;border-radius:12px;padding:13px;font:inherit;outline:none}input:focus{border-color:var(--accent);box-shadow:0 0 0 3px #7892ff22}label{display:block;font-size:12px;color:var(--muted);margin:12px 0 7px}.note{font-size:12px;line-height:1.7;color:var(--muted);margin-top:13px}.stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.stat{padding:13px;border-radius:14px;background:#0b1322;border:1px solid #24334d;min-width:0}.stat small{display:block;color:var(--muted);font-size:11px;margin-bottom:5px}.stat strong{font-size:15px;display:block;overflow-wrap:anywhere}.stat.wide{grid-column:1/-1}.section-gap{height:20px}.error{color:#ff9ba9;min-height:20px;font-size:13px;margin-top:10px}.viewer-pill{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 13px;border-radius:13px;background:#0b1322;border:1px solid #24334d}.viewer-pill strong{font-size:17px}.dot{width:8px;height:8px;border-radius:50%;background:var(--good);display:inline-block;margin-right:7px;box-shadow:0 0 12px #43d6a0aa}
+@media(max-width:820px){main{padding:20px 13px 36px}.layout{grid-template-columns:1fr}.top{align-items:flex-start}.card{padding:16px}.brand h1{font-size:21px}}
+@media(max-width:430px){.top{gap:8px}.status{font-size:11px;padding:7px 9px}.controls button{flex:1}.stats{gap:8px}.stat{padding:11px}}
 </style>
 </head>
 <body><main>
-<header class="top"><div class="brand"><div class="logo">◉</div><div><h1>PocketCam</h1><div class="muted">即時監看控制台</div></div></div><div class="status" id="status">尚未連線</div></header>
+<header class="top"><div class="brand"><div class="logo">◉</div><div><div class="eyebrow">LIVE CAMERA SYSTEM</div><h1>PocketCam</h1><div class="muted">即時監看控制台</div></div></div><div class="status" id="status">尚未連線</div></header>
 <div class="layout">
-<section class="card"><h2>即時畫面</h2><div class="screen"><video id="video" autoplay playsinline controls></video><div class="placeholder" id="placeholder"><div style="font-size:34px">▣</div><b>等待攝影機連線</b><div class="muted">輸入觀看密碼即可連線</div></div></div><div class="controls"><button id="connect">連線觀看</button><button class="secondary" id="disconnect" disabled>中斷連線</button><button class="secondary" id="fullscreen">全螢幕</button></div><div class="error" id="error" role="status"></div></section>
-<aside class="card"><h2>設備配對</h2><label for="password">單一連線密碼</label><input id="password" type="password" autocomplete="current-password" placeholder="輸入 PocketCam 密碼"><div class="note">手機開播不需要輸入密碼；每位網頁觀看者都必須輸入觀看密碼。最多同時 4 位觀看者。</div><div style="height:18px"></div><h2>連線資訊</h2><div class="stats"><div class="stat"><small>連線方式</small><strong id="transport">WebRTC 點對點</strong></div><div class="stat"><small>影像狀態</small><strong id="media">尚無影像</strong></div><div class="stat"><small>音訊</small><strong id="audio">等待串流</strong></div></div></aside>
-</div><p class="note">PocketCam 會在攝影機端顯示持續運作通知。若跨網路無法建立點對點連線，需設定 TURN 中繼服務。</p>
+<section class="card">
+  <h2>即時畫面 <span class="muted" style="font-size:12px;font-weight:400">/ LIVE FEED</span></h2>
+  <div class="screen"><video id="video" autoplay playsinline controls></video><div class="placeholder" id="placeholder"><div style="font-size:38px">◉</div><b>等待攝影機連線</b><div class="muted">輸入觀看密碼即可連線</div></div></div>
+  <div class="controls"><button id="connect">連線觀看</button><button class="secondary" id="disconnect" disabled>中斷連線</button><button class="secondary" id="fullscreen">全螢幕</button></div>
+  <div class="error" id="error" role="status"></div>
+  <div class="section-gap"></div>
+  <h2>即時串流數據</h2>
+  <div class="stats">
+    <div class="stat"><small>影像 FPS</small><strong id="fps">--</strong></div>
+    <div class="stat"><small>解析度</small><strong id="resolution">--</strong></div>
+    <div class="stat"><small>接收位元率</small><strong id="bitrate">--</strong></div>
+    <div class="stat"><small>往返延遲 RTT</small><strong id="rtt">--</strong></div>
+  </div>
+</section>
+<aside class="card">
+  <h2>設備配對</h2>
+  <label for="password">觀看密碼</label>
+  <input id="password" type="password" autocomplete="current-password" placeholder="輸入 PocketCam 密碼">
+  <div class="note">攝影機手機按下開始直播即可上線。每位網頁觀看者都必須輸入觀看密碼。</div>
+  <div class="section-gap"></div>
+  <h2>觀看者管理</h2>
+  <div class="viewer-pill"><span><span class="dot"></span>目前觀看者</span><strong id="viewerCount">0 / 4</strong></div>
+  <div class="section-gap"></div>
+  <h2>連線狀態</h2>
+  <div class="stats">
+    <div class="stat wide"><small>連線方式</small><strong id="transport">WebRTC 點對點</strong></div>
+    <div class="stat wide"><small>影像狀態</small><strong id="media">尚無影像</strong></div>
+    <div class="stat wide"><small>音訊</small><strong id="audio">等待串流</strong></div>
+  </div>
+  <p class="note">最多同時 4 位觀看者。PocketCam 會在攝影機端顯示持續運作通知。若跨網路無法建立點對點連線，可能需要 TURN 中繼服務。</p>
+</aside>
+</div>
 </main>
 <script>
 const $ = id => document.getElementById(id);
@@ -32,7 +63,7 @@ let remoteDescriptionReady = false;
 let pendingCandidates = [];
 let authenticated = false;
 let receivedVideoTrack = false;
-let receivedAudioTrack = false;
+let receivedAudioTrack = false;\nlet previousVideoStats = null;\nlet previousStatsAt = 0;
 let cameraId = null;
 let clientId = null;
 
@@ -98,7 +129,7 @@ function cleanup(updateStatus = true) {
   $("connect").disabled = false;
   $("disconnect").disabled = true;
   $("media").textContent = "尚無影像";
-  $("audio").textContent = "等待串流";
+  $("audio").textContent = "等待串流";\n  $("fps").textContent = "--";\n  $("resolution").textContent = "--";\n  $("bitrate").textContent = "--";\n  $("rtt").textContent = "--";\n  $("viewerCount").textContent = "0 / 4";\n  $("transport").textContent = "WebRTC 點對點";
   if (updateStatus) setStatus("尚未連線");
 }
 function attachRemoteTrack(event) {
@@ -140,13 +171,18 @@ function startStatsMonitor() {
     if (!current) return;
     try {
       const reports = await current.getStats();
+      const now = performance.now();
       let inboundVideo = null;
       let inboundAudio = null;
+      let selectedPair = null;
       reports.forEach(report => {
-        if (report.type !== "inbound-rtp") return;
-        const kind = report.kind || report.mediaType;
-        if (kind === "video") inboundVideo = report;
-        if (kind === "audio") inboundAudio = report;
+        if (report.type === "inbound-rtp") {
+          const kind = report.kind || report.mediaType;
+          if (kind === "video") inboundVideo = report;
+          if (kind === "audio") inboundAudio = report;
+        }
+        if (report.type === "candidate-pair" && report.state === "succeeded" &&
+            (report.selected || report.nominated)) selectedPair = report;
       });
 
       if (inboundAudio && (inboundAudio.bytesReceived || 0) > 0) {
@@ -157,7 +193,11 @@ function startStatsMonitor() {
 
       if (inboundVideo) {
         const frames = inboundVideo.framesDecoded || 0;
+        const bytes = inboundVideo.bytesReceived || 0;
         const packets = inboundVideo.packetsReceived || 0;
+        const width = inboundVideo.frameWidth || 0;
+        const height = inboundVideo.frameHeight || 0;
+        $("resolution").textContent = width && height ? width + " × " + height : "--";
         if (frames > 0) {
           $("media").textContent = "影像解碼中：" + frames + " 幀";
         } else if (packets > 0) {
@@ -167,13 +207,25 @@ function startStatsMonitor() {
         } else {
           $("media").textContent = "尚未收到影像軌道";
         }
+        if (previousVideoStats && previousStatsAt) {
+          const elapsed = (now - previousStatsAt) / 1000;
+          const fps = Math.max(0, (frames - previousVideoStats.frames) / elapsed);
+          const kbps = Math.max(0, (bytes - previousVideoStats.bytes) * 8 / elapsed / 1000);
+          $("fps").textContent = fps.toFixed(1);
+          $("bitrate").textContent = kbps.toFixed(0) + " kbps";
+        }
+        previousVideoStats = { frames, bytes };
+        previousStatsAt = now;
       } else if (!receivedVideoTrack) {
         $("media").textContent = "尚未收到影像軌道";
+      }
+      if (selectedPair && Number.isFinite(selectedPair.currentRoundTripTime)) {
+        $("rtt").textContent = Math.round(selectedPair.currentRoundTripTime * 1000) + " ms";
       }
     } catch (error) {
       console.warn("Could not read WebRTC statistics", error);
     }
-  }, 2000);
+  }, 1000);
 }
 async function connect() {
   fail("");
@@ -216,7 +268,7 @@ async function connect() {
 
     pc.onconnectionstatechange = () => {
       if (!pc) return;
-      setStatus("影音連線：" + pc.connectionState);
+      setStatus("影音連線：" + pc.connectionState);\n      $("transport").textContent = "WebRTC · " + pc.connectionState;
       if (pc.connectionState === "failed") {
         fail("影音連線失敗。若兩台裝置不在同一網路，可能需要 TURN 中繼服務。");
       }
@@ -246,6 +298,10 @@ async function connect() {
           return;
         }
         if (message.type === "pong") return;
+        if (message.type === "viewer-count") {
+          $("viewerCount").textContent = (message.count || 0) + " / " + (message.maxViewers || MAX_VIEWERS);
+          return;
+        }
         if (message.type === "peer-ready") {
           if (message.role === "camera" && message.peerId) {
             cameraId = message.peerId;
