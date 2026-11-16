@@ -69,7 +69,9 @@ let previousStatsAt = 0;
 let cameraId = null;
 let clientId = null;
 
-const iceServers = [{ urls: "stun:stun.l.google.com:19302" }];
+const STUN_SERVER = { urls: "stun:stun.l.google.com:19302" };
+const TURN_CREDENTIALS_URL = "https://icon.chenneww6666.workers.dev/turn-credentials";
+let iceServers = [STUN_SERVER];
 
 function setStatus(value) {
   $("status").textContent = value;
@@ -183,7 +185,9 @@ function startStatsMonitor() {
       let inboundVideo = null;
       let inboundAudio = null;
       let selectedPair = null;
+      const candidates = new Map();
       reports.forEach(report => {
+        if (report.type === "local-candidate" || report.type === "remote-candidate") candidates.set(report.id, report);
         if (report.type === "inbound-rtp") {
           const kind = report.kind || report.mediaType;
           if (kind === "video") inboundVideo = report;
@@ -230,6 +234,12 @@ function startStatsMonitor() {
       if (selectedPair && Number.isFinite(selectedPair.currentRoundTripTime)) {
         $("rtt").textContent = Math.round(selectedPair.currentRoundTripTime * 1000) + " ms";
       }
+      if (selectedPair) {
+        const localCandidate = candidates.get(selectedPair.localCandidateId);
+        const remoteCandidate = candidates.get(selectedPair.remoteCandidateId);
+        const relayed = localCandidate?.candidateType === "relay" || remoteCandidate?.candidateType === "relay";
+        $("transport").textContent = relayed ? "TURN 中繼連線" : "WebRTC 點對點";
+      }
     } catch (error) {
       console.warn("Could not read WebRTC statistics", error);
     }
@@ -250,6 +260,24 @@ async function connect() {
 
   try {
     clientId = crypto.randomUUID().replace(/-/g, "");
+    // Request short-lived TURN credentials. If TURN is not configured, keep STUN-only mode.
+    try {
+      const turnResponse = await fetch(TURN_CREDENTIALS_URL, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ password, clientId })
+      });
+      if (turnResponse.ok) {
+        const turnData = await turnResponse.json();
+        iceServers = [STUN_SERVER, ...(Array.isArray(turnData.iceServers) ? turnData.iceServers : [])];
+      } else {
+        iceServers = [STUN_SERVER];
+        console.warn("PocketCam TURN credentials unavailable:", turnResponse.status);
+      }
+    } catch (turnError) {
+      iceServers = [STUN_SERVER];
+      console.warn("PocketCam TURN credential request failed; using STUN:", turnError);
+    }
     pc = new RTCPeerConnection({ iceServers });
 
     pc.onicecandidate = event => {
