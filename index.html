@@ -63,7 +63,9 @@ let remoteDescriptionReady = false;
 let pendingCandidates = [];
 let authenticated = false;
 let receivedVideoTrack = false;
-let receivedAudioTrack = false;\nlet previousVideoStats = null;\nlet previousStatsAt = 0;
+let receivedAudioTrack = false;
+let previousVideoStats = null;
+let previousStatsAt = 0;
 let cameraId = null;
 let clientId = null;
 
@@ -129,7 +131,13 @@ function cleanup(updateStatus = true) {
   $("connect").disabled = false;
   $("disconnect").disabled = true;
   $("media").textContent = "尚無影像";
-  $("audio").textContent = "等待串流";\n  $("fps").textContent = "--";\n  $("resolution").textContent = "--";\n  $("bitrate").textContent = "--";\n  $("rtt").textContent = "--";\n  $("viewerCount").textContent = "0 / 4";\n  $("transport").textContent = "WebRTC 點對點";
+  $("audio").textContent = "等待串流";
+  $("fps").textContent = "--";
+  $("resolution").textContent = "--";
+  $("bitrate").textContent = "--";
+  $("rtt").textContent = "--";
+  $("viewerCount").textContent = "0 / 4";
+  $("transport").textContent = "WebRTC 點對點";
   if (updateStatus) setStatus("尚未連線");
 }
 function attachRemoteTrack(event) {
@@ -268,7 +276,8 @@ async function connect() {
 
     pc.onconnectionstatechange = () => {
       if (!pc) return;
-      setStatus("影音連線：" + pc.connectionState);\n      $("transport").textContent = "WebRTC · " + pc.connectionState;
+      setStatus("影音連線：" + pc.connectionState);
+      $("transport").textContent = "WebRTC · " + pc.connectionState;
       if (pc.connectionState === "failed") {
         fail("影音連線失敗。若兩台裝置不在同一網路，可能需要 TURN 中繼服務。");
       }
