@@ -1,3 +1,5 @@
+const MAX_VIEWERS = 4;
+
 function constantTimeEqual(left, right) {
   const a = String(left);
   const b = String(right);
@@ -9,6 +11,20 @@ function constantTimeEqual(left, right) {
   return mismatch === 0;
 }
 
+function attachmentOf(socket) {
+  try { return socket.deserializeAttachment() || {}; }
+  catch { return {}; }
+}
+
+function safeSend(socket, payload) {
+  try {
+    socket.send(JSON.stringify(payload));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -17,14 +33,15 @@ export default {
       return Response.json({
         ok: true,
         service: "PocketCam signaling",
-        version: 2,
-        passwordConfigured: Boolean(env.POCKETCAM_PASSWORD)
+        version: 3,
+        passwordConfigured: Boolean(env.POCKETCAM_PASSWORD),
+        maxViewers: MAX_VIEWERS
       });
     }
 
     if (url.pathname === "/ws") {
       if (!env.POCKETCAM_PASSWORD) {
-        return new Response("PocketCam password is not configured on this Worker.", {
+        return new Response("PocketCam viewer password is not configured on this Worker.", {
           status: 503,
           headers: { "content-type": "text/plain; charset=utf-8" }
         });
@@ -34,7 +51,6 @@ export default {
         return new Response("WebSocket upgrade required", { status: 426 });
       }
 
-      // All clients join one private room; the room identifier is no longer exposed.
       const id = env.ROOMS.idFromName("pocketcam-single-room");
       return env.ROOMS.get(id).fetch(request);
     }
@@ -63,55 +79,106 @@ export class Room {
     try {
       message = JSON.parse(raw);
     } catch {
-      socket.send(JSON.stringify({ type: "error", message: "Invalid JSON" }));
+      safeSend(socket, { type: "error", message: "Invalid JSON" });
       return;
     }
 
     if (message.type === "ping") {
-      try { socket.send(JSON.stringify({ type: "pong" })); } catch {}
+      safeSend(socket, { type: "pong" });
       return;
     }
 
-    const attachment = socket.deserializeAttachment() || {};
+    const attachment = attachmentOf(socket);
 
     if (!attachment.authenticated) {
       if (message.type !== "hello" || !["camera", "viewer"].includes(message.role)) {
-        socket.send(JSON.stringify({ type: "error", message: "Authentication required" }));
+        safeSend(socket, { type: "error", message: "Authentication required" });
         socket.close(1008, "Authentication required");
         return;
       }
 
-      const expectedPassword = this.env.POCKETCAM_PASSWORD || "";
-      const suppliedPassword = String(message.password || "");
-      if (!expectedPassword || !constantTimeEqual(suppliedPassword, expectedPassword)) {
-        socket.send(JSON.stringify({ type: "error", message: "連線密碼錯誤，或 Worker 尚未設定密碼" }));
-        socket.close(1008, "Password rejected");
+      // The camera starts without a typed password. Viewers must authenticate.
+      if (message.role === "viewer") {
+        const expectedPassword = this.env.POCKETCAM_PASSWORD || "";
+        const suppliedPassword = String(message.password || "");
+        if (!expectedPassword || !constantTimeEqual(suppliedPassword, expectedPassword)) {
+          safeSend(socket, {
+            type: "error",
+            message: "觀看密碼錯誤，或 Worker 尚未設定觀看密碼"
+          });
+          socket.close(1008, "Password rejected");
+          return;
+        }
+      }
+
+      const sockets = this.ctx.getWebSockets();
+      const active = sockets
+        .filter(other => other !== socket)
+        .map(other => ({ socket: other, data: attachmentOf(other) }))
+        .filter(item => item.data.authenticated);
+
+      if (message.role === "camera" && active.some(item => item.data.role === "camera")) {
+        safeSend(socket, { type: "error", message: "目前已有攝影機直播" });
+        socket.close(1008, "Camera already connected");
         return;
       }
 
-      // Allow exactly one camera and one viewer in this single-device setup.
-      const sockets = this.ctx.getWebSockets();
-      const roleTaken = sockets.some(other => {
-        if (other === socket) return false;
-        const data = other.deserializeAttachment() || {};
-        return data.authenticated && data.role === message.role;
+      const viewers = active.filter(item => item.data.role === "viewer");
+      if (message.role === "viewer" && viewers.length >= MAX_VIEWERS) {
+        safeSend(socket, {
+          type: "error",
+          message: "目前觀看人數已滿（最多 " + MAX_VIEWERS + " 位）"
+        });
+        socket.close(1013, "Viewer limit reached");
+        return;
+      }
+
+      const clientId = String(message.clientId || crypto.randomUUID()).slice(0, 80);
+      if (!/^[A-Za-z0-9_-]{8,80}$/.test(clientId)) {
+        safeSend(socket, { type: "error", message: "Invalid client ID" });
+        socket.close(1008, "Invalid client ID");
+        return;
+      }
+
+      socket.serializeAttachment({
+        authenticated: true,
+        role: message.role,
+        clientId
       });
 
-      if (roleTaken) {
-        socket.send(JSON.stringify({ type: "error", message: "這個角色已經有裝置連線" }));
-        socket.close(1008, "Role already connected");
-        return;
-      }
+      safeSend(socket, {
+        type: "authenticated",
+        role: message.role,
+        clientId,
+        maxViewers: MAX_VIEWERS
+      });
 
-      socket.serializeAttachment({ authenticated: true, role: message.role });
-      socket.send(JSON.stringify({ type: "authenticated", role: message.role }));
-
-      for (const other of this.ctx.getWebSockets()) {
-        if (other === socket) continue;
-        const data = other.deserializeAttachment() || {};
-        if (data.authenticated) {
-          other.send(JSON.stringify({ type: "peer-ready", role: message.role }));
-          socket.send(JSON.stringify({ type: "peer-ready", role: data.role }));
+      if (message.role === "camera") {
+        for (const item of viewers) {
+          safeSend(socket, {
+            type: "peer-ready",
+            role: "viewer",
+            peerId: item.data.clientId
+          });
+          safeSend(item.socket, {
+            type: "peer-ready",
+            role: "camera",
+            peerId: clientId
+          });
+        }
+      } else {
+        const camera = active.find(item => item.data.role === "camera");
+        if (camera) {
+          safeSend(camera.socket, {
+            type: "peer-ready",
+            role: "viewer",
+            peerId: clientId
+          });
+          safeSend(socket, {
+            type: "peer-ready",
+            role: "camera",
+            peerId: camera.data.clientId
+          });
         }
       }
       return;
@@ -119,22 +186,74 @@ export class Room {
 
     if (!["offer", "answer", "candidate", "hangup"].includes(message.type)) return;
 
-    for (const other of this.ctx.getWebSockets()) {
-      if (other === socket) continue;
-      const data = other.deserializeAttachment() || {};
-      if (data.authenticated) {
-        other.send(JSON.stringify({ ...message, from: attachment.role }));
-      }
+    const targetId = String(message.target || "");
+    if (!targetId || targetId === attachment.clientId) {
+      safeSend(socket, { type: "error", message: "Signal target is missing or invalid" });
+      return;
     }
+
+    const allowed =
+      attachment.role === "camera"
+        ? ["offer", "candidate", "hangup"].includes(message.type)
+        : ["answer", "candidate", "hangup"].includes(message.type);
+
+    if (!allowed) {
+      safeSend(socket, { type: "error", message: "Signal type is not allowed for this role" });
+      return;
+    }
+
+    const target = this.ctx.getWebSockets().find(other => {
+      if (other === socket) return false;
+      const data = attachmentOf(other);
+      return data.authenticated && data.clientId === targetId;
+    });
+
+    if (!target) {
+      safeSend(socket, { type: "error", message: "指定的觀看端或攝影機已離線" });
+      return;
+    }
+
+    const targetData = attachmentOf(target);
+    if (
+      (attachment.role === "camera" && targetData.role !== "viewer") ||
+      (attachment.role === "viewer" && targetData.role !== "camera")
+    ) {
+      safeSend(socket, { type: "error", message: "Invalid signal recipient" });
+      return;
+    }
+
+    safeSend(target, {
+      ...message,
+      from: attachment.clientId
+    });
   }
 
   async webSocketClose(socket) {
-    const attachment = socket.deserializeAttachment() || {};
-    for (const other of this.ctx.getWebSockets()) {
-      if (other === socket) continue;
-      const data = other.deserializeAttachment() || {};
-      if (data.authenticated) {
-        other.send(JSON.stringify({ type: "peer-left", role: attachment.role || "peer" }));
+    const attachment = attachmentOf(socket);
+    if (!attachment.authenticated) return;
+
+    const sockets = this.ctx.getWebSockets();
+    if (attachment.role === "camera") {
+      for (const other of sockets) {
+        const data = attachmentOf(other);
+        if (data.authenticated && data.role === "viewer") {
+          safeSend(other, {
+            type: "peer-left",
+            role: "camera",
+            peerId: attachment.clientId
+          });
+        }
+      }
+    } else if (attachment.role === "viewer") {
+      for (const other of sockets) {
+        const data = attachmentOf(other);
+        if (data.authenticated && data.role === "camera") {
+          safeSend(other, {
+            type: "peer-left",
+            role: "viewer",
+            peerId: attachment.clientId
+          });
+        }
       }
     }
   }
