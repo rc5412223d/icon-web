@@ -33,10 +33,63 @@ export default {
       return Response.json({
         ok: true,
         service: "PocketCam signaling",
-        version: 4,
+        version: 5,
         passwordConfigured: Boolean(env.POCKETCAM_PASSWORD),
         maxViewers: MAX_VIEWERS
       });
+    }
+
+    if (url.pathname === "/turn-credentials") {
+      const allowedOrigin = "https://icon.bols.dpdns.org";
+      const origin = request.headers.get("Origin") || "";
+      const corsHeaders = {
+        "Access-Control-Allow-Origin": allowedOrigin,
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+        "Vary": "Origin"
+      };
+      if (origin && origin !== allowedOrigin) {
+        return new Response("Origin not allowed", { status: 403 });
+      }
+      if (request.method === "OPTIONS") {
+        return new Response(null, { status: 204, headers: corsHeaders });
+      }
+      if (request.method !== "POST") {
+        return new Response("Method not allowed", { status: 405, headers: corsHeaders });
+      }
+      if (!env.POCKETCAM_PASSWORD) {
+        return Response.json({ ok: false, error: "Viewer password is not configured" }, { status: 503, headers: corsHeaders });
+      }
+      let body;
+      try { body = await request.json(); }
+      catch { return Response.json({ ok: false, error: "Invalid JSON" }, { status: 400, headers: corsHeaders }); }
+      if (!constantTimeEqual(String(body.password || ""), env.POCKETCAM_PASSWORD)) {
+        return Response.json({ ok: false, error: "Invalid password" }, { status: 401, headers: corsHeaders });
+      }
+      const urls = String(env.TURN_URLS || "").split(",").map(value => value.trim()).filter(Boolean);
+      const sharedSecret = env.TURN_SHARED_SECRET;
+      if (!urls.length || !sharedSecret) {
+        return Response.json({ ok: true, configured: false, iceServers: [] }, { headers: corsHeaders });
+      }
+      const ttl = Math.min(3600, Math.max(60, Number(env.TURN_TTL_SECONDS) || 600));
+      const expires = Math.floor(Date.now() / 1000) + ttl;
+      const clientId = String(body.clientId || "viewer").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 80) || "viewer";
+      const username = expires + ":" + clientId;
+      const key = await crypto.subtle.importKey(
+        "raw",
+        new TextEncoder().encode(sharedSecret),
+        { name: "HMAC", hash: "SHA-1" },
+        false,
+        ["sign"]
+      );
+      const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(username));
+      const credential = btoa(String.fromCharCode(...new Uint8Array(signature)));
+      return Response.json({
+        ok: true,
+        configured: true,
+        expiresAt: expires,
+        iceServers: [{ urls, username, credential }]
+      }, { headers: { ...corsHeaders, "Cache-Control": "no-store" } });
     }
 
     if (url.pathname === "/ws") {
