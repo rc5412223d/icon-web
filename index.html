@@ -8,7 +8,7 @@
 <style>
 :root{color-scheme:dark;--bg:#0b0e16;--panel:#151a27;--line:#293247;--muted:#9aa6bd;--accent:#6d8cff;--good:#39c98a;--bad:#ff647c}
 *{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at top,#1a2340 0,#0b0e16 55%);color:#eef2ff;font:15px system-ui,-apple-system,"Noto Sans TC",sans-serif;min-height:100vh}
-main{max-width:1050px;margin:auto;padding:28px 18px 50px}.top{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:22px}.brand{display:flex;align-items:center;gap:12px}.logo{width:44px;height:44px;border-radius:14px;background:linear-gradient(135deg,#7b8fff,#4c5bd4);display:grid;place-items:center;font-size:23px}.muted{color:var(--muted)}h1{font-size:22px;margin:0}h2{font-size:17px;margin:0 0 14px}.status{border:1px solid var(--line);padding:8px 12px;border-radius:99px;color:var(--muted);font-size:13px}.layout{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(260px,.8fr);gap:16px}.card{background:linear-gradient(145deg,#171d2b,#111622);border:1px solid var(--line);border-radius:20px;padding:18px;box-shadow:0 18px 50px #0003}.screen{background:#05070c;border:1px solid #30394c;border-radius:14px;aspect-ratio:16/9;display:grid;place-items:center;overflow:hidden;position:relative}.screen video{width:100%;height:100%;object-fit:contain}.placeholder{text-align:center;color:var(--muted);padding:20px}.controls{display:flex;gap:9px;flex-wrap:wrap;margin-top:14px}button{border:0;border-radius:11px;padding:11px 15px;background:var(--accent);color:white;font-weight:650;cursor:pointer}button.secondary{background:#252e42}button:disabled{opacity:.45;cursor:not-allowed}input{width:100%;background:#0c111c;color:white;border:1px solid var(--line);border-radius:11px;padding:12px;font:inherit;outline:none}input:focus{border-color:var(--accent)}label{display:block;font-size:13px;color:var(--muted);margin:12px 0 7px}.fields{display:grid;grid-template-columns:1fr 1fr;gap:10px}.note{font-size:12px;line-height:1.6;color:var(--muted);margin-top:14px}.stats{display:grid;gap:10px}.stat{padding:12px;border-radius:12px;background:#0e1420;border:1px solid #222d40}.stat small{display:block;color:var(--muted);margin-bottom:4px}.stat strong{font-size:14px}.error{color:#ff9ba9;min-height:20px;font-size:13px;margin-top:10px}
+main{max-width:1050px;margin:auto;padding:28px 18px 50px}.top{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:22px}.brand{display:flex;align-items:center;gap:12px}.logo{width:44px;height:44px;border-radius:14px;background:linear-gradient(135deg,#7b8fff,#4c5bd4);display:grid;place-items:center;font-size:23px}.muted{color:var(--muted)}h1{font-size:22px;margin:0}h2{font-size:17px;margin:0 0 14px}.status{border:1px solid var(--line);padding:8px 12px;border-radius:99px;color:var(--muted);font-size:13px}.layout{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(260px,.8fr);gap:16px}.card{background:linear-gradient(145deg,#171d2b,#111622);border:1px solid var(--line);border-radius:20px;padding:18px;box-shadow:0 18px 50px #0003}.screen{background:#05070c;border:1px solid #30394c;border-radius:14px;aspect-ratio:16/9;display:grid;place-items:center;overflow:hidden;position:relative}.screen video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#05070c}.placeholder{position:absolute;inset:0;display:grid;align-content:center;justify-items:center;text-align:center;color:var(--muted);padding:20px;pointer-events:none}.controls{display:flex;gap:9px;flex-wrap:wrap;margin-top:14px}button{border:0;border-radius:11px;padding:11px 15px;background:var(--accent);color:white;font-weight:650;cursor:pointer}button.secondary{background:#252e42}button:disabled{opacity:.45;cursor:not-allowed}input{width:100%;background:#0c111c;color:white;border:1px solid var(--line);border-radius:11px;padding:12px;font:inherit;outline:none}input:focus{border-color:var(--accent)}label{display:block;font-size:13px;color:var(--muted);margin:12px 0 7px}.fields{display:grid;grid-template-columns:1fr 1fr;gap:10px}.note{font-size:12px;line-height:1.6;color:var(--muted);margin-top:14px}.stats{display:grid;gap:10px}.stat{padding:12px;border-radius:12px;background:#0e1420;border:1px solid #222d40}.stat small{display:block;color:var(--muted);margin-bottom:4px}.stat strong{font-size:14px}.error{color:#ff9ba9;min-height:20px;font-size:13px;margin-top:10px}
 @media(max-width:760px){main{padding:20px 12px}.layout{grid-template-columns:1fr}.top{align-items:flex-start}.fields{grid-template-columns:1fr}.card{padding:15px}}
 </style>
 </head>
@@ -25,9 +25,13 @@ const WORKER_WS = "wss://icon.chenneww6666.workers.dev/ws";
 let ws = null;
 let pc = null;
 let heartbeat = null;
+let statsTimer = null;
+let remoteStream = null;
 let remoteDescriptionReady = false;
 let pendingCandidates = [];
 let authenticated = false;
+let receivedVideoTrack = false;
+let receivedAudioTrack = false;
 
 const iceServers = [{ urls: "stun:stun.l.google.com:19302" }];
 
@@ -48,11 +52,21 @@ function stopHeartbeat() {
     heartbeat = null;
   }
 }
+function stopStatsMonitor() {
+  if (statsTimer !== null) {
+    clearInterval(statsTimer);
+    statsTimer = null;
+  }
+}
 function cleanup(updateStatus = true) {
   stopHeartbeat();
+  stopStatsMonitor();
   authenticated = false;
   remoteDescriptionReady = false;
   pendingCandidates = [];
+  receivedVideoTrack = false;
+  receivedAudioTrack = false;
+  remoteStream = null;
   if (pc) {
     pc.ontrack = null;
     pc.onicecandidate = null;
@@ -68,11 +82,84 @@ function cleanup(updateStatus = true) {
   }
   $("video").srcObject = null;
   $("placeholder").style.display = "grid";
+  $("placeholder").innerHTML = "<div style='font-size:34px'>▣</div><b>等待攝影機連線</b><div class='muted'>輸入單一密碼即可連線</div>";
   $("connect").disabled = false;
   $("disconnect").disabled = true;
   $("media").textContent = "尚無影像";
   $("audio").textContent = "等待串流";
   if (updateStatus) setStatus("尚未連線");
+}
+function attachRemoteTrack(event) {
+  const track = event.track;
+  if (!track) return;
+
+  // Some WebRTC implementations provide an empty event.streams array.
+  // Build a local MediaStream from every received track instead of ignoring it.
+  if (!remoteStream) remoteStream = new MediaStream();
+  if (!remoteStream.getTracks().some(existing => existing.id === track.id)) {
+    remoteStream.addTrack(track);
+  }
+
+  if (track.kind === "video") {
+    receivedVideoTrack = true;
+    $("media").textContent = "已收到影像軌道，等待畫面解碼…";
+    $("placeholder").innerHTML = "<div style='font-size:34px'>▣</div><b>已連接攝影機</b><div class='muted'>正在等待第一張影像</div>";
+    track.onunmute = () => {
+      $("media").textContent = "影像軌道已啟用，正在解碼…";
+      $("video").play().catch(error => console.warn("Video playback not started", error));
+    };
+  } else if (track.kind === "audio") {
+    receivedAudioTrack = true;
+    $("audio").textContent = "已收到音訊軌道";
+    if (!receivedVideoTrack) {
+      $("placeholder").innerHTML = "<div style='font-size:34px'>◖</div><b>聲音已連線</b><div class='muted'>正在等待影像資料…</div>";
+    }
+  }
+
+  $("video").srcObject = remoteStream;
+  $("video").play().catch(error => console.warn("Remote media playback not started", error));
+}
+function startStatsMonitor() {
+  stopStatsMonitor();
+  statsTimer = setInterval(async () => {
+    const current = pc;
+    if (!current) return;
+    try {
+      const reports = await current.getStats();
+      let inboundVideo = null;
+      let inboundAudio = null;
+      reports.forEach(report => {
+        if (report.type !== "inbound-rtp") return;
+        const kind = report.kind || report.mediaType;
+        if (kind === "video") inboundVideo = report;
+        if (kind === "audio") inboundAudio = report;
+      });
+
+      if (inboundAudio && (inboundAudio.bytesReceived || 0) > 0) {
+        $("audio").textContent = "音訊接收中";
+      } else if (receivedAudioTrack) {
+        $("audio").textContent = "已收到音訊軌道，等待封包…";
+      }
+
+      if (inboundVideo) {
+        const frames = inboundVideo.framesDecoded || 0;
+        const packets = inboundVideo.packetsReceived || 0;
+        if (frames > 0) {
+          $("media").textContent = "影像解碼中：" + frames + " 幀";
+        } else if (packets > 0) {
+          $("media").textContent = "收到影像封包，尚未解碼";
+        } else if (receivedVideoTrack) {
+          $("media").textContent = "有影像軌道，但尚未收到封包";
+        } else {
+          $("media").textContent = "尚未收到影像軌道";
+        }
+      } else if (!receivedVideoTrack) {
+        $("media").textContent = "尚未收到影像軌道";
+      }
+    } catch (error) {
+      console.warn("Could not read WebRTC statistics", error);
+    }
+  }, 2000);
 }
 async function connect() {
   fail("");
@@ -97,14 +184,19 @@ async function connect() {
     };
 
     pc.ontrack = event => {
-      const stream = event.streams && event.streams[0];
-      if (stream) {
-        $("video").srcObject = stream;
+      console.info("PocketCam remote track:", event.track?.kind, "streams:", event.streams?.length || 0);
+      attachRemoteTrack(event);
+    };
+
+    $("video").onloadeddata = () => {
+      if ($("video").videoWidth > 0) {
         $("placeholder").style.display = "none";
-        $("media").textContent = "正在播放";
-        $("audio").textContent = "依攝影機音訊來源";
-        $("video").play().catch(() => {});
+        $("media").textContent = "畫面已載入：" + $("video").videoWidth + "×" + $("video").videoHeight;
       }
+    };
+    $("video").onplaying = () => {
+      $("placeholder").style.display = "none";
+      $("media").textContent = "正在播放：" + $("video").videoWidth + "×" + $("video").videoHeight;
     };
 
     pc.onconnectionstatechange = () => {
@@ -117,6 +209,7 @@ async function connect() {
         fail("影音連線中斷，正在等待恢復…");
       }
     };
+    startStatsMonitor();
 
     ws = new WebSocket(WORKER_WS);
 
