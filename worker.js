@@ -181,6 +181,7 @@ export class Room {
           });
         }
       }
+      this.broadcastViewerList();
       return;
     }
 
@@ -228,6 +229,34 @@ export class Room {
     });
   }
 
+  broadcastViewerList() {
+    const sockets = this.ctx.getWebSockets();
+    const camera = sockets
+      .map(socket => ({ socket, data: attachmentOf(socket) }))
+      .find(item => item.data.authenticated && item.data.role === "camera");
+    const viewers = sockets
+      .map(socket => ({ socket, data: attachmentOf(socket) }))
+      .filter(item => item.data.authenticated && item.data.role === "viewer");
+    if (camera) {
+      safeSend(camera.socket, {
+        type: "viewer-list",
+        viewers: viewers.map((item, index) => ({
+          id: item.data.clientId,
+          label: "觀看者 " + (index + 1)
+        })),
+        count: viewers.length,
+        maxViewers: MAX_VIEWERS
+      });
+    }
+    for (const item of viewers) {
+      safeSend(item.socket, {
+        type: "viewer-count",
+        count: viewers.length,
+        maxViewers: MAX_VIEWERS
+      });
+    }
+  }
+
   async webSocketClose(socket) {
     const attachment = attachmentOf(socket);
     if (!attachment.authenticated) return;
@@ -256,6 +285,7 @@ export class Room {
         }
       }
     }
+    this.broadcastViewerList();
   }
 
   async webSocketError(socket) {
