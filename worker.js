@@ -33,7 +33,7 @@ export default {
       return Response.json({
         ok: true,
         service: "PocketCam signaling",
-        version: 3,
+        version: 4,
         passwordConfigured: Boolean(env.POCKETCAM_PASSWORD),
         maxViewers: MAX_VIEWERS
       });
