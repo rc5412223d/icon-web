@@ -15,13 +15,14 @@ main{max-width:1050px;margin:auto;padding:28px 18px 50px}.top{display:flex;align
 <body><main>
 <header class="top"><div class="brand"><div class="logo">◉</div><div><h1>PocketCam</h1><div class="muted">即時監看控制台</div></div></div><div class="status" id="status">尚未連線</div></header>
 <div class="layout">
-<section class="card"><h2>即時畫面</h2><div class="screen"><video id="video" autoplay playsinline controls></video><div class="placeholder" id="placeholder"><div style="font-size:34px">▣</div><b>等待攝影機連線</b><div class="muted">輸入單一密碼即可連線</div></div></div><div class="controls"><button id="connect">連線觀看</button><button class="secondary" id="disconnect" disabled>中斷連線</button><button class="secondary" id="fullscreen">全螢幕</button></div><div class="error" id="error" role="status"></div></section>
-<aside class="card"><h2>設備配對</h2><label for="password">單一連線密碼</label><input id="password" type="password" autocomplete="current-password" placeholder="輸入 PocketCam 密碼"><div class="note">攝影機端與觀看端使用相同密碼。請勿把密碼分享給未授權的人。</div><div style="height:18px"></div><h2>連線資訊</h2><div class="stats"><div class="stat"><small>連線方式</small><strong id="transport">WebRTC 點對點</strong></div><div class="stat"><small>影像狀態</small><strong id="media">尚無影像</strong></div><div class="stat"><small>音訊</small><strong id="audio">等待串流</strong></div></div></aside>
+<section class="card"><h2>即時畫面</h2><div class="screen"><video id="video" autoplay playsinline controls></video><div class="placeholder" id="placeholder"><div style="font-size:34px">▣</div><b>等待攝影機連線</b><div class="muted">輸入觀看密碼即可連線</div></div></div><div class="controls"><button id="connect">連線觀看</button><button class="secondary" id="disconnect" disabled>中斷連線</button><button class="secondary" id="fullscreen">全螢幕</button></div><div class="error" id="error" role="status"></div></section>
+<aside class="card"><h2>設備配對</h2><label for="password">單一連線密碼</label><input id="password" type="password" autocomplete="current-password" placeholder="輸入 PocketCam 密碼"><div class="note">手機開播不需要輸入密碼；每位網頁觀看者都必須輸入觀看密碼。最多同時 4 位觀看者。</div><div style="height:18px"></div><h2>連線資訊</h2><div class="stats"><div class="stat"><small>連線方式</small><strong id="transport">WebRTC 點對點</strong></div><div class="stat"><small>影像狀態</small><strong id="media">尚無影像</strong></div><div class="stat"><small>音訊</small><strong id="audio">等待串流</strong></div></div></aside>
 </div><p class="note">PocketCam 會在攝影機端顯示持續運作通知。若跨網路無法建立點對點連線，需設定 TURN 中繼服務。</p>
 </main>
 <script>
 const $ = id => document.getElementById(id);
 const WORKER_WS = "wss://icon.chenneww6666.workers.dev/ws";
+const MAX_VIEWERS = 4;
 let ws = null;
 let pc = null;
 let heartbeat = null;
@@ -32,6 +33,8 @@ let pendingCandidates = [];
 let authenticated = false;
 let receivedVideoTrack = false;
 let receivedAudioTrack = false;
+let cameraId = null;
+let clientId = null;
 
 const iceServers = [{ urls: "stun:stun.l.google.com:19302" }];
 
@@ -45,6 +48,13 @@ function send(data) {
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify(data));
   }
+}
+function sendToCamera(data) {
+  if (!cameraId) {
+    console.warn("PocketCam: camera ID is not known yet; signal was not sent");
+    return;
+  }
+  send({ ...data, target: cameraId });
 }
 function stopHeartbeat() {
   if (heartbeat !== null) {
@@ -67,6 +77,8 @@ function cleanup(updateStatus = true) {
   receivedVideoTrack = false;
   receivedAudioTrack = false;
   remoteStream = null;
+  cameraId = null;
+  clientId = null;
   if (pc) {
     pc.ontrack = null;
     pc.onicecandidate = null;
@@ -82,7 +94,7 @@ function cleanup(updateStatus = true) {
   }
   $("video").srcObject = null;
   $("placeholder").style.display = "grid";
-  $("placeholder").innerHTML = "<div style='font-size:34px'>▣</div><b>等待攝影機連線</b><div class='muted'>輸入單一密碼即可連線</div>";
+  $("placeholder").innerHTML = "<div style='font-size:34px'>▣</div><b>等待攝影機連線</b><div class='muted'>輸入觀看密碼即可連線</div>";
   $("connect").disabled = false;
   $("disconnect").disabled = true;
   $("media").textContent = "尚無影像";
@@ -93,8 +105,7 @@ function attachRemoteTrack(event) {
   const track = event.track;
   if (!track) return;
 
-  // Some WebRTC implementations provide an empty event.streams array.
-  // Build a local MediaStream from every received track instead of ignoring it.
+  // Build our own stream because event.streams can be empty on some WebRTC stacks.
   if (!remoteStream) remoteStream = new MediaStream();
   if (!remoteStream.getTracks().some(existing => existing.id === track.id)) {
     remoteStream.addTrack(track);
@@ -107,6 +118,9 @@ function attachRemoteTrack(event) {
     track.onunmute = () => {
       $("media").textContent = "影像軌道已啟用，正在解碼…";
       $("video").play().catch(error => console.warn("Video playback not started", error));
+    };
+    track.onmute = () => {
+      $("media").textContent = "影像軌道暫停";
     };
   } else if (track.kind === "audio") {
     receivedAudioTrack = true;
@@ -165,7 +179,7 @@ async function connect() {
   fail("");
   const password = $("password").value.trim();
   if (!password) {
-    fail("請先輸入單一連線密碼");
+    fail("請先輸入觀看密碼");
     $("password").focus();
     return;
   }
@@ -175,11 +189,12 @@ async function connect() {
   setStatus("正在連接訊號伺服器…");
 
   try {
+    clientId = crypto.randomUUID().replace(/-/g, "");
     pc = new RTCPeerConnection({ iceServers });
 
     pc.onicecandidate = event => {
       if (event.candidate) {
-        send({ type: "candidate", candidate: event.candidate });
+        sendToCamera({ type: "candidate", candidate: event.candidate });
       }
     };
 
@@ -214,10 +229,10 @@ async function connect() {
     ws = new WebSocket(WORKER_WS);
 
     ws.onopen = () => {
-      send({ type: "hello", role: "viewer", password });
+      send({ type: "hello", role: "viewer", password, clientId });
       stopHeartbeat();
       heartbeat = setInterval(() => send({ type: "ping" }), 15000);
-      setStatus("已連上訊號伺服器，正在驗證密碼…");
+      setStatus("已連上訊號伺服器，正在驗證觀看密碼…");
     };
 
     ws.onmessage = async event => {
@@ -227,12 +242,15 @@ async function connect() {
         if (message.type === "authenticated") {
           authenticated = true;
           $("disconnect").disabled = false;
-          setStatus("密碼驗證成功，等待攝影機…");
+          setStatus("密碼正確，等待攝影機…（最多 4 位觀看者）");
           return;
         }
         if (message.type === "pong") return;
         if (message.type === "peer-ready") {
-          setStatus("攝影機已連線，等待影音資料…");
+          if (message.role === "camera" && message.peerId) {
+            cameraId = message.peerId;
+            setStatus("攝影機已連線，等待影音資料…");
+          }
           return;
         }
         if (message.type === "error") {
@@ -242,6 +260,8 @@ async function connect() {
         }
         if (message.type === "offer") {
           if (!pc) return;
+          cameraId = message.from || cameraId;
+          if (!cameraId) throw new Error("沒有收到攝影機識別資訊");
           await pc.setRemoteDescription(message.sdp);
           remoteDescriptionReady = true;
 
@@ -253,12 +273,13 @@ async function connect() {
 
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
-          send({ type: "answer", sdp: pc.localDescription });
+          sendToCamera({ type: "answer", sdp: pc.localDescription });
           setStatus("已回覆攝影機，正在建立影音連線…");
           return;
         }
         if (message.type === "candidate" && message.candidate) {
           if (!pc) return;
+          if (message.from) cameraId = message.from;
           if (remoteDescriptionReady) {
             try { await pc.addIceCandidate(message.candidate); }
             catch (error) { console.warn("ICE candidate rejected", error); }
