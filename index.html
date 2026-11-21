@@ -69,9 +69,18 @@ let previousStatsAt = 0;
 let cameraId = null;
 let clientId = null;
 
-const STUN_SERVER = { urls: "stun:stun.l.google.com:19302" };
-const TURN_CREDENTIALS_URL = "https://icon.chenneww6666.workers.dev/turn-credentials";
-let iceServers = [STUN_SERVER];
+const iceServers = [{ urls: "stun:stun.l.google.com:19302" }];
+const SIGNAL_TIMEOUT_MS = 12000;
+const CAMERA_WAIT_TIMEOUT_MS = 35000;
+const MEDIA_WAIT_TIMEOUT_MS = 45000;
+const HEARTBEAT_INTERVAL_MS = 12000;
+const HEARTBEAT_TIMEOUT_MS = 30000;
+let watchdog = null;
+let lastPongAt = 0;
+let connectionStartedAt = 0;
+let cameraSeenAt = 0;
+let mediaSeenAt = 0;
+let disconnectGrace = null;
 
 function setStatus(value) {
   $("status").textContent = value;
@@ -96,6 +105,41 @@ function stopHeartbeat() {
     clearInterval(heartbeat);
     heartbeat = null;
   }
+  if (watchdog !== null) {
+    clearInterval(watchdog);
+    watchdog = null;
+  }
+}
+function clearDisconnectGrace() {
+  if (disconnectGrace !== null) {
+    clearTimeout(disconnectGrace);
+    disconnectGrace = null;
+  }
+}
+function startConnectionWatchdog() {
+  stopHeartbeat();
+  lastPongAt = Date.now();
+  heartbeat = setInterval(() => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    send({ type: "ping" });
+  }, HEARTBEAT_INTERVAL_MS);
+  watchdog = setInterval(() => {
+    const now = Date.now();
+    if (ws && ws.readyState === WebSocket.OPEN && now - lastPongAt > HEARTBEAT_TIMEOUT_MS) {
+      fail("訊號伺服器長時間沒有回應，請重新連線。");
+      cleanup();
+      return;
+    }
+    if (!cameraSeenAt && connectionStartedAt && now - connectionStartedAt > CAMERA_WAIT_TIMEOUT_MS) {
+      fail("等待攝影機逾時，請確認攝影機手機仍在直播，再重新連線。");
+      cleanup();
+      return;
+    }
+    if (cameraSeenAt && !mediaSeenAt && now - cameraSeenAt > MEDIA_WAIT_TIMEOUT_MS) {
+      fail("已找到攝影機，但等待影像逾時。請確認攝影機畫面正常，再重新連線。");
+      cleanup();
+    }
+  }, 2000);
 }
 function stopStatsMonitor() {
   if (statsTimer !== null) {
@@ -112,6 +156,12 @@ function cleanup(updateStatus = true) {
   receivedVideoTrack = false;
   receivedAudioTrack = false;
   remoteStream = null;
+  previousVideoStats = null;
+  previousStatsAt = 0;
+  connectionStartedAt = 0;
+  cameraSeenAt = 0;
+  mediaSeenAt = 0;
+  clearDisconnectGrace();
   cameraId = null;
   clientId = null;
   if (pc) {
@@ -154,6 +204,7 @@ function attachRemoteTrack(event) {
 
   if (track.kind === "video") {
     receivedVideoTrack = true;
+    mediaSeenAt = Date.now();
     $("media").textContent = "已收到影像軌道，等待畫面解碼…";
     $("placeholder").innerHTML = "<div style='font-size:34px'>▣</div><b>已連接攝影機</b><div class='muted'>正在等待第一張影像</div>";
     track.onunmute = () => {
@@ -259,25 +310,8 @@ async function connect() {
   setStatus("正在連接訊號伺服器…");
 
   try {
+    connectionStartedAt = Date.now();
     clientId = crypto.randomUUID().replace(/-/g, "");
-    // Request short-lived TURN credentials. If TURN is not configured, keep STUN-only mode.
-    try {
-      const turnResponse = await fetch(TURN_CREDENTIALS_URL, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ password, clientId })
-      });
-      if (turnResponse.ok) {
-        const turnData = await turnResponse.json();
-        iceServers = [STUN_SERVER, ...(Array.isArray(turnData.iceServers) ? turnData.iceServers : [])];
-      } else {
-        iceServers = [STUN_SERVER];
-        console.warn("PocketCam TURN credentials unavailable:", turnResponse.status);
-      }
-    } catch (turnError) {
-      iceServers = [STUN_SERVER];
-      console.warn("PocketCam TURN credential request failed; using STUN:", turnError);
-    }
     pc = new RTCPeerConnection({ iceServers });
 
     pc.onicecandidate = event => {
@@ -304,23 +338,43 @@ async function connect() {
 
     pc.onconnectionstatechange = () => {
       if (!pc) return;
-      setStatus("影音連線：" + pc.connectionState);
-      $("transport").textContent = "WebRTC · " + pc.connectionState;
-      if (pc.connectionState === "failed") {
-        fail("影音連線失敗。若兩台裝置不在同一網路，可能需要 TURN 中繼服務。");
-      }
-      if (pc.connectionState === "disconnected") {
-        fail("影音連線中斷，正在等待恢復…");
+      const state = pc.connectionState;
+      setStatus("影音連線：" + state);
+      $("transport").textContent = "WebRTC · " + state;
+      if (state === "connected") {
+        clearDisconnectGrace();
+        fail("");
+      } else if (state === "disconnected") {
+        fail("影音連線暫時中斷，正在嘗試自動恢復…");
+        clearDisconnectGrace();
+        disconnectGrace = setTimeout(() => {
+          if (pc && pc.connectionState === "disconnected") {
+            fail("連線未能自行恢復，請重新連線。");
+            cleanup();
+          }
+        }, 10000);
+      } else if (state === "failed") {
+        clearDisconnectGrace();
+        fail("影音連線建立失敗。請確認攝影機與觀看端網路正常，再重新連線。");
+        cleanup();
       }
     };
     startStatsMonitor();
 
     ws = new WebSocket(WORKER_WS);
+    const connectingSocket = ws;
+    const signalTimeout = setTimeout(() => {
+      if (ws === connectingSocket && connectingSocket.readyState !== WebSocket.OPEN) {
+        fail("連接訊號伺服器逾時，請檢查網路後重試。");
+        cleanup();
+      }
+    }, SIGNAL_TIMEOUT_MS);
 
     ws.onopen = () => {
+      clearTimeout(signalTimeout);
+      if (ws !== connectingSocket) return;
       send({ type: "hello", role: "viewer", password, clientId });
-      stopHeartbeat();
-      heartbeat = setInterval(() => send({ type: "ping" }), 15000);
+      startConnectionWatchdog();
       setStatus("已連上訊號伺服器，正在驗證觀看密碼…");
     };
 
@@ -334,7 +388,10 @@ async function connect() {
           setStatus("密碼正確，等待攝影機…（最多 4 位觀看者）");
           return;
         }
-        if (message.type === "pong") return;
+        if (message.type === "pong") {
+          lastPongAt = Date.now();
+          return;
+        }
         if (message.type === "viewer-count") {
           $("viewerCount").textContent = (message.count || 0) + " / " + (message.maxViewers || MAX_VIEWERS);
           return;
@@ -342,6 +399,7 @@ async function connect() {
         if (message.type === "peer-ready") {
           if (message.role === "camera" && message.peerId) {
             cameraId = message.peerId;
+            cameraSeenAt = Date.now();
             setStatus("攝影機已連線，等待影音資料…");
           }
           return;
@@ -401,9 +459,15 @@ async function connect() {
     };
 
     ws.onclose = () => {
-      stopHeartbeat();
-      if (ws) {
+      clearTimeout(signalTimeout);
+      if (ws === connectingSocket) {
         ws = null;
+        stopHeartbeat();
+        if (pc) {
+          pc.close();
+          pc = null;
+        }
+        stopStatsMonitor();
         if (authenticated) setStatus("訊號連線已關閉");
         authenticated = false;
         $("connect").disabled = false;
