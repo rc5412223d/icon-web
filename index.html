@@ -204,7 +204,6 @@ function attachRemoteTrack(event) {
 
   if (track.kind === "video") {
     receivedVideoTrack = true;
-    mediaSeenAt = Date.now();
     $("media").textContent = "已收到影像軌道，等待畫面解碼…";
     $("placeholder").innerHTML = "<div style='font-size:34px'>▣</div><b>已連接攝影機</b><div class='muted'>正在等待第一張影像</div>";
     track.onunmute = () => {
@@ -461,17 +460,9 @@ async function connect() {
     ws.onclose = () => {
       clearTimeout(signalTimeout);
       if (ws === connectingSocket) {
-        ws = null;
-        stopHeartbeat();
-        if (pc) {
-          pc.close();
-          pc = null;
-        }
-        stopStatsMonitor();
-        if (authenticated) setStatus("訊號連線已關閉");
-        authenticated = false;
-        $("connect").disabled = false;
-        $("disconnect").disabled = true;
+        const wasAuthenticated = authenticated;
+        cleanup(false);
+        if (wasAuthenticated) setStatus("訊號連線已關閉，請重新連線");
       }
     };
   } catch (error) {
